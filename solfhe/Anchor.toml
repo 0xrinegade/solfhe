@@ -5,7 +5,7 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-solfhe = "CvjJemvL4RD2x1n8smiQ73bTMHwnM4tD2EA54Na5zn9o"
+solfhe = "BxVYzMVCkq4Amxwz5sN8Z9EkATWSoTs99bkLUEmnEscm"
 
 [registry]
 url = "https://api.apr.dev"
