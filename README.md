@@ -1,4 +1,4 @@
-# Solfhe(λ)
+# solfhe(λ)
 
 <div align="center">
   <img src="https://github.com/user-attachments/assets/7e0eabd6-4f28-4a75-acb2-22dd5e724981" alt="solfhe" width="300">
