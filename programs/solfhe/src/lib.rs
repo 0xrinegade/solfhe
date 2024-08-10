@@ -11,6 +11,41 @@ declare_id!("BxVYzMVCkq4Amxwz5sN8Z9EkATWSoTs99bkLUEmnEscm");
 pub mod solfhe {
     use super::*;
 
+    pub fn create_ad(
+        ctx: Context<CreateAd>,
+        content: String,
+        target_traits: Vec<u8>,
+        duration: u64,
+    ) -> Result<()> {
+        let state = &mut ctx.accounts.state;
+        let advertiser = &mut ctx.accounts.advertiser;
+        let ad = &mut ctx.accounts.ad;
+
+        // Check that the ad time is valid
+        if duration == 0 || duration > MAX_AD_DURATION {
+            return Err(AdFHEError::InvalidAdDuration.into());
+        }
+
+        // Check that target properties are valid
+        if target_traits.is_empty() || target_traits.len() > MAX_TARGET_TRAITS {
+            return Err(AdFHEError::InvalidTargetTraits.into());
+        }
+
+        ad.advertiser = advertiser.key();
+        ad.content = content;
+        ad.target_traits = target_traits;
+        ad.duration = duration;
+        ad.created_at = Clock::get()?.unix_timestamp;
+        ad.is_active = true;
+
+        advertiser.ad_count = advertiser.ad_count.checked_add(1).unwrap();
+        state.ad_count = state.ad_count.checked_add(1).unwrap();
+
+        msg!("New ad created: {}", content);
+        Ok(())
+    }
+
+
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let state = &mut ctx.accounts.state;
         state.authority = ctx.accounts.authority.key();
@@ -130,6 +165,34 @@ pub mod solfhe {
 
             Ok(match_score)
         }
+        #[derive(Accounts)]
+        pub struct CreateAd<'info> {
+            #[account(mut)]
+            pub state: Account<'info, StateAccount>,
+            #[account(mut, has_one = authority)]
+            pub advertiser: Account<'info, AdvertiserAccount>,
+            #[account(
+                init,
+                payer = authority,
+                space = 8 + size_of::<AdAccount>(),
+                seeds = [b"ad", advertiser.key().as_ref(), &advertiser.ad_count.to_le_bytes()],
+                bump
+            )]
+            pub ad: Account<'info, AdAccount>,
+            #[account(mut)]
+            pub authority: Signer<'info>,
+            pub system_program: Program<'info, System>,
+        }
+
+        #[account]
+        pub struct AdAccount {
+            pub advertiser: Pubkey,
+            pub content: String,
+            pub target_traits: Vec<u8>,
+            pub duration: u64,
+            pub created_at: i64,
+            pub is_active: bool,
+        }
 
         // Update MatchedAdsAccount structure
         #[account]
@@ -151,9 +214,9 @@ pub mod solfhe {
         // Update error types
         #[error_code]
         pub enum AdFHEError {
-            #[msg("Invalid advertising time")]
+            #[msg("Invalid advertising duration")]
             InvalidAdDuration,
-            #[msg("Invalid target properties")]
+            #[msg("Invalid target traits")]
             InvalidTargetTraits,
             #[msg("Insufficient balance")]
             InsufficientBalance,
@@ -162,4 +225,6 @@ pub mod solfhe {
         }
 
         // FHE match threshold value
+        const MAX_AD_DURATION: u64 = 30 * 24 * 60 * 60;
         const FHE_MATCH_THRESHOLD: u64 = 75;
+        const MAX_TARGET_TRAITS: usize = 10;
