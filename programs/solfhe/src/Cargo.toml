@@ -17,3 +17,5 @@ default = []
 
 [dependencies]
 anchor-lang = "0.29.0"
+hyperlane-core = "0.1.0"
+hyperlane-solana = "0.1.0"

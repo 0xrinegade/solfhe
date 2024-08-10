@@ -1,5 +1,8 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::hash::{hash, Hash};
+use borsh::{BorshDeserialize, BorshSerialize};
+use hyperlane_core::{Decode, Encode};
+use hyperlane_solana::{HyperlaneMessage, HyperlaneReceiver};
 use std::mem::size_of;
 use tfhe::prelude::*;
 use tfhe::shortint::parameters::PARAM_MESSAGE_2_CARRY_2;
@@ -11,6 +14,22 @@ declare_id!("BxVYzMVCkq4Amxwz5sN8Z9EkATWSoTs99bkLUEmnEscm");
 #[program]
 pub mod solfhe {
     use super::*;
+
+    pub fn process_hyperlane_message(
+        ctx: Context<ProcessHyperlaneMessage>,
+        message: HyperlaneMessage,
+    ) -> Result<()> {
+        let cross_chain_message = CrossChainMessage::decode(&message.body)
+            .map_err(|_| AdFHEError::InvalidCrossChainMessage)?;
+
+        match cross_chain_message.message_type {
+            0 => process_fhenix_ad_data(ctx, &cross_chain_message.payload)?,
+            1 => process_fhenix_user_data(ctx, &cross_chain_message.payload)?,
+            _ => return Err(AdFHEError::UnknownMessageType.into()),
+        }
+
+        Ok(())
+    }
 
     pub fn create_ad(
         ctx: Context<CreateAd>,
@@ -266,6 +285,55 @@ fn decrypt_score(score: &FheCiphertext, secret_key: &SecretKey) -> Result<u64> {
     score.decrypt(secret_key)
 }
 
+#[derive(BorshSerialize, BorshDeserialize)]
+struct FhenixAdData {
+    ad_id: u64,
+    encrypted_content: Vec<u8>,
+    encrypted_target_traits: Vec<u8>,
+    duration: u64,
+}
+
+#[derive(BorshSerialize, BorshDeserialize)]
+struct FhenixUserData {
+    user_id: Pubkey,
+    encrypted_traits: Vec<u8>,
+}
+
+fn process_fhenix_ad_data(ctx: Context<ProcessHyperlaneMessage>, payload: &[u8]) -> Result<()> {
+    let fhenix_ad_data =
+        FhenixAdData::try_from_slice(payload).map_err(|_| AdFHEError::InvalidCrossChainMessage)?;
+    let ad_account = &mut ctx.accounts.ad_account;
+    ad_account.advertiser = ctx.accounts.authority.key();
+    ad_account.content = fhenix_ad_data.encrypted_content;
+    ad_account.target_traits = fhenix_ad_data.encrypted_target_traits;
+    ad_account.duration = fhenix_ad_data.duration;
+    ad_account.created_at = Clock::get()?.unix_timestamp;
+    ad_account.is_active = true;
+    let state = &mut ctx.accounts.state;
+    state.ad_count = state.ad_count.checked_add(1).unwrap();
+
+    msg!("Processed Fhenix ad data: Ad ID {}", fhenix_ad_data.ad_id);
+    Ok(())
+}
+
+fn process_fhenix_user_data(ctx: Context<ProcessHyperlaneMessage>, payload: &[u8]) -> Result<()> {
+    let fhenix_user_data = FhenixUserData::try_from_slice(payload)
+        .map_err(|_| AdFHEError::InvalidCrossChainMessage)?;
+    let user_data_account = &mut ctx.accounts.user_data_account;
+    user_data_account.authority = fhenix_user_data.user_id;
+    user_data_account.encrypted_data = fhenix_user_data.encrypted_traits;
+    let state = &mut ctx.accounts.state;
+    if user_data_account.to_account_info().owner == &ID {
+    } else {
+        state.user_count = state.user_count.checked_add(1).unwrap();
+    }
+    msg!(
+        "Processed Fhenix user data for user: {}",
+        fhenix_user_data.user_id
+    );
+    Ok(())
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
 pub struct ProofData {
     pub proof: Vec<u8>,
@@ -273,10 +341,29 @@ pub struct ProofData {
     pub timestamp: i64,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Default, Encode, Decode)]
+pub struct CrossChainMessage {
+    pub message_type: u8,
+    pub payload: Vec<u8>,
+}
+
 #[account]
 pub struct ProofAccount {
     pub authority: Pubkey,
     pub proof_data: ProofData,
+}
+
+#[derive(Accounts)]
+pub struct ProcessHyperlaneMessage<'info> {
+    #[account(mut)]
+    pub state: Account<'info, StateAccount>,
+    #[account(mut)]
+    pub ad_account: Account<'info, AdAccount>,
+    #[account(mut)]
+    pub user_data_account: Account<'info, UserDataAccount>,
+    pub hyperlane_receiver: Account<'info, HyperlaneReceiver>,
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
