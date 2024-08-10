@@ -1,7 +1,7 @@
 # Solfhe(λ)
 
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/7e0eabd6-4f28-4a75-acb2-22dd5e724981" alt="solfhe" width="150">
+  <img src="https://github.com/user-attachments/assets/7e0eabd6-4f28-4a75-acb2-22dd5e724981" alt="solfhe" width="300">
 </div>
 
 
@@ -9,13 +9,13 @@
 ## Blockchain (Solana) Part
 
 ### a. Smart Contracts
-- [-] Develop the main FHE contract in Rust.
-- [-] Implement advertiser registration logic.
+- [x] Develop the main FHE contract in Rust.
+- [x] Implement advertiser registration logic.
 - [ ] Create data structures for encrypted user data and advertisements.
-- [-] Implement the matrix multiplication algorithm for ad matching.
+- [x] Implement the matrix multiplication algorithm for ad matching.
 
 ### b. FHE Integration
-- [ ] Research and choose an FHE library compatible with Solana.
+- [x] Research and choose an FHE library compatible with Solana.
 - [ ] Implement encryption and decryption functions.
 - [ ] Ensure secure storage of encrypted data on-chain.
 
