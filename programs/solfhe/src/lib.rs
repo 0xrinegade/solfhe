@@ -4,6 +4,7 @@ use std::mem::size_of;
 use tfhe::prelude::*;
 use tfhe::shortint::parameters::PARAM_MESSAGE_2_CARRY_2;
 use tfhe::shortint::prelude::*;
+use zama_fhe::prelude::*;
 
 declare_id!("BxVYzMVCkq4Amxwz5sN8Z9EkATWSoTs99bkLUEmnEscm");
 
@@ -130,11 +131,13 @@ pub mod solfhe {
             encrypted_data: &[u8],
             params: &FheParameters,
         ) -> Result<Vec<FheCiphertext>> {
-            let decrypted_data = decrypt_vector(secret_key, encrypted_data, params)?;
+            let decrypted_data = zama_fhe::decrypt_vector(secret_key, encrypted_data, params)
+                .map_err(|_| AdFHEError::DecryptionError)?;
 
             let mut fhe_traits = Vec::new();
             for trait_value in decrypted_data {
-                fhe_traits.push(encrypt(trait_value, secret_key, params)?);
+                let encrypted_trait = trait_value.encrypt(&secret_key.to_public(), params)?;
+                fhe_traits.push(encrypted_trait);
             }
 
             Ok(fhe_traits)
@@ -147,7 +150,8 @@ pub mod solfhe {
         ) -> Result<Vec<FheCiphertext>> {
             let mut fhe_traits = Vec::new();
             for trait_value in target_traits {
-                fhe_traits.push(encrypt(*trait_value as u64, public_key, params)?);
+                let encrypted_trait = (*trait_value as u64).encrypt(public_key, params)?;
+                fhe_traits.push(encrypted_trait);
             }
 
             Ok(fhe_traits)
@@ -164,33 +168,29 @@ pub mod solfhe {
         //     Ok(fhe_traits)
         // }
 
+
         fn perform_fhe_match(
             user_traits: &[FheCiphertext],
             target_traits: &[FheCiphertext],
             public_key: &PublicKey,
             params: &FheParameters,
         ) -> Result<FheCiphertext> {
-            let mut match_score = encrypt(0u64, public_key, params)?;
+            let mut match_score = 0u64.encrypt(public_key, params)?;
 
             for (user_trait, target_trait) in user_traits.iter().zip(target_traits.iter()) {
-                // Calculate differences with XOR operation
-                let diff = fhe_xor(user_trait, target_trait, params)?;
-
-                // Add the difference score to the total score
-                match_score = fhe_add(&match_score, &diff, params)?;
+                let diff = user_trait.fhe_xor(target_trait, params)?;
+                match_score = match_score.fhe_add(&diff, params)?;
             }
 
-            // Normalize the total score divided by the number of traits
-            let trait_count = encrypt(user_traits.len() as u64, public_key, params)?;
-            match_score = fhe_div(&match_score, &trait_count, params)?;
+            let trait_count = (user_traits.len() as u64).encrypt(public_key, params)?;
+            match_score = match_score.fhe_div(&trait_count, params)?;
 
             Ok(match_score)
         }
 
         fn decrypt_score(score: &FheCiphertext, secret_key: &SecretKey) -> Result<u64> {
-            decrypt(score, secret_key)
+            score.decrypt(secret_key)
         }
-
 
         #[derive(Accounts)]
         pub struct CreateAd<'info> {
@@ -273,38 +273,46 @@ pub mod solfhe {
             fn fhe_div(&self, other: &Self, params: &FheParameters) -> FheResult<Self> where Self: Sized;
         }
 
-        // FHE işlemleri için implementasyonlar
         impl FheEncrypt for u64 {
             fn encrypt(&self, public_key: &PublicKey, params: &FheParameters) -> FheResult<FheCiphertext> {
-                // Gerçek implementasyon burada olacak
-                Err(AdFHEError::EncryptionError)
+                match zama_fhe::encrypt(*self, public_key, params) {
+                    Ok(ciphertext) => Ok(ciphertext),
+                    Err(_) => Err(AdFHEError::EncryptionError)
+                }
             }
         }
 
         impl FheDecrypt for FheCiphertext {
             fn decrypt(&self, secret_key: &SecretKey) -> FheResult<u64> {
-                // The actual implementation will be here
-                Err(AdFHEError::DecryptionError)
+                match zama_fhe::decrypt(self, secret_key) {
+                    Ok(plaintext) => Ok(plaintext),
+                    Err(_) => Err(AdFHEError::DecryptionError)
+                }
             }
         }
 
         impl FheOperation for FheCiphertext {
             fn fhe_add(&self, other: &Self, params: &FheParameters) -> FheResult<Self> {
-                // The actual implementation will be here
-                Err(AdFHEError::FheOperationFailed)
+                match zama_fhe::add(self, other, params) {
+                    Ok(result) => Ok(result),
+                    Err(_) => Err(AdFHEError::FheOperationFailed)
+                }
             }
 
             fn fhe_xor(&self, other: &Self, params: &FheParameters) -> FheResult<Self> {
-                // The actual implementation will be here
-                Err(AdFHEError::FheOperationFailed)
+                match zama_fhe::xor(self, other, params) {
+                    Ok(result) => Ok(result),
+                    Err(_) => Err(AdFHEError::FheOperationFailed)
+                }
             }
 
             fn fhe_div(&self, other: &Self, params: &FheParameters) -> FheResult<Self> {
-                // The actual implementation will be here
-                Err(AdFHEError::FheOperationFailed)
+                match zama_fhe::div(self, other, params) {
+                    Ok(result) => Ok(result),
+                    Err(_) => Err(AdFHEError::FheOperationFailed)
+                }
             }
         }
-
         // FHE match threshold value
         const MAX_AD_DURATION: u64 = 30 * 24 * 60 * 60;
         const FHE_MATCH_THRESHOLD: u64 = 75;
