@@ -5,7 +5,7 @@ import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { Program } from "@project-serum/anchor";
 import { CONFIG } from "../config";
-import { encrypt } from "../utils/fhe";
+import { encrypt, initializeFHE } from "../utils/fhe";
 import * as anchor from "@project-serum/anchor";
 
 interface Trait {
@@ -20,6 +20,13 @@ const UserDataInput: React.FC = () => {
   const { program } = useProgram();
   const { publicKey, sendTransaction } = useWallet();
   const { connection } = useConnection();
+
+  useEffect(() => {
+    initializeFHE().catch((err) => {
+      console.error("Failed to initialize FHE:", err);
+      setError("Failed to initialize encryption. Please try again.");
+    });
+  }, []);
 
   const handleTraitChange = (
     index: number,
@@ -91,7 +98,7 @@ const UserDataInput: React.FC = () => {
     try {
       const traitsString = JSON.stringify(data);
       const encryptedString = await encrypt(traitsString);
-      return Buffer.from(encryptedString, "base64");
+      return Buffer.from(encryptedString);
     } catch (err) {
       console.error("Error encrypting user data:", err);
       throw err;
