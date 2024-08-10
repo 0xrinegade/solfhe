@@ -17,6 +17,7 @@ pub mod solfhe {
         content: String,
         target_traits: Vec<u8>,
         duration: u64,
+        payment: u64,
     ) -> Result<()> {
         require!(!content.is_empty(), AdFHEError::InvalidAdContent);
         require!(
@@ -27,10 +28,21 @@ pub mod solfhe {
             !target_traits.is_empty() && target_traits.len() <= MAX_TARGET_TRAITS,
             AdFHEError::InvalidTargetTraits
         );
+        require!(payment >= MIN_AD_PAYMENT, AdFHEError::InsufficientPayment);
 
         let state = &mut ctx.accounts.state;
         let advertiser = &mut ctx.accounts.advertiser;
         let ad = &mut ctx.accounts.ad;
+
+        // Transfer payment from advertiser to program account
+        let cpi_context = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.authority.to_account_info(),
+                to: ad.to_account_info(),
+            },
+        );
+        system_program::transfer(cpi_context, payment)?;
 
         ad.advertiser = advertiser.key();
         ad.content = content;
@@ -38,6 +50,7 @@ pub mod solfhe {
         ad.duration = duration;
         ad.created_at = Clock::get()?.unix_timestamp;
         ad.is_active = true;
+        ad.payment = payment;
 
         advertiser.ad_count = advertiser.ad_count.checked_add(1).unwrap();
         state.ad_count = state.ad_count.checked_add(1).unwrap();
@@ -336,6 +349,7 @@ pub struct AdAccount {
     pub duration: u64,
     pub created_at: i64,
     pub is_active: bool,
+    pub payment: u64,
 }
 
 // Update MatchedAdsAccount structure
@@ -382,6 +396,8 @@ pub enum AdFHEError {
     InvalidAdContent,
     #[msg("Invalid encrypted data")]
     InvalidEncryptedData,
+    #[msg("Insufficient payment for ad creation")]
+    InsufficientPayment,
 }
 
 type FheResult<T> = std::result::Result<T, AdFHEError>;
@@ -448,6 +464,7 @@ impl FheOperation for FheCiphertext {
     }
 }
 // FHE match threshold value
+const MIN_AD_PAYMENT: u64 = 1_000_000; // 0.001 SOL
 const MAX_PROOF_SIZE: usize = 1024;
 const MAX_PUBLIC_INPUTS_SIZE: usize = 256;
 const MAX_AD_DURATION: u64 = 30 * 24 * 60 * 60;
