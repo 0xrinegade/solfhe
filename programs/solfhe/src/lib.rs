@@ -35,6 +35,21 @@ pub mod solfhe {
         msg!("New advertiser saved 💾: {}", name);
         Ok(())
     }
+    pub fn store_encrypted_user_data(
+        ctx: Context<StoreEncryptedUserData>,
+        encrypted_data: Vec<u8>,
+    ) -> Result<()> {
+        let state = &mut ctx.accounts.state;
+        let user_data = &mut ctx.accounts.user_data;
+
+        user_data.authority = ctx.accounts.authority.key();
+        user_data.encrypted_data = encrypted_data;
+
+        state.user_count = state.user_count.checked_add(1).unwrap();
+
+        msg!("User data saved in encrypted form");
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
