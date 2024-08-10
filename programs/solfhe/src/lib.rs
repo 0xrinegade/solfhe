@@ -12,38 +12,38 @@ pub mod solfhe {
     use super::*;
 
     pub fn create_ad(
-        ctx: Context<CreateAd>,
-        content: String,
-        target_traits: Vec<u8>,
-        duration: u64,
-    ) -> Result<()> {
-        let state = &mut ctx.accounts.state;
-        let advertiser = &mut ctx.accounts.advertiser;
-        let ad = &mut ctx.accounts.ad;
+            ctx: Context<CreateAd>,
+            content: String,
+            target_traits: Vec<u8>,
+            duration: u64,
+        ) -> Result<()> {
+            let state = &mut ctx.accounts.state;
+            let advertiser = &mut ctx.accounts.advertiser;
+            let ad = &mut ctx.accounts.ad;
 
-        // Check that the ad time is valid
-        if duration == 0 || duration > MAX_AD_DURATION {
-            return Err(AdFHEError::InvalidAdDuration.into());
+            // Check that the ad time is valid
+            if duration == 0 || duration > MAX_AD_DURATION {
+                return Err(AdFHEError::InvalidAdDuration.into());
+            }
+
+            // Check that target properties are valid
+            if target_traits.is_empty() || target_traits.len() > MAX_TARGET_TRAITS {
+                return Err(AdFHEError::InvalidTargetTraits.into());
+            }
+
+            ad.advertiser = advertiser.key();
+            ad.content = content;
+            ad.target_traits = target_traits;
+            ad.duration = duration;
+            ad.created_at = Clock::get()?.unix_timestamp;
+            ad.is_active = true;
+
+            advertiser.ad_count = advertiser.ad_count.checked_add(1).unwrap();
+            state.ad_count = state.ad_count.checked_add(1).unwrap();
+
+            msg!("New ad created: {}", content);
+            Ok(())
         }
-
-        // Check that target properties are valid
-        if target_traits.is_empty() || target_traits.len() > MAX_TARGET_TRAITS {
-            return Err(AdFHEError::InvalidTargetTraits.into());
-        }
-
-        ad.advertiser = advertiser.key();
-        ad.content = content;
-        ad.target_traits = target_traits;
-        ad.duration = duration;
-        ad.created_at = Clock::get()?.unix_timestamp;
-        ad.is_active = true;
-
-        advertiser.ad_count = advertiser.ad_count.checked_add(1).unwrap();
-        state.ad_count = state.ad_count.checked_add(1).unwrap();
-
-        msg!("New ad created: {}", content);
-        Ok(())
-    }
 
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
@@ -88,25 +88,28 @@ pub mod solfhe {
         msg!("User data saved in encrypted form");
         Ok(())
     }
+
+
     pub fn match_ads(ctx: Context<MatchAds>, encrypted_user_traits: Vec<u8>) -> Result<()> {
             let ads = &ctx.accounts.ads;
             let matched_ads = &mut ctx.accounts.matched_ads;
 
             // Generate the necessary parameters and switches for FHE
-            let (client_key, server_key) = gen_keys(PARAM_MESSAGE_2_CARRY_2);
+            let fhe_params = FheParameters::default();
+            let (public_key, secret_key) = generate_keys(&fhe_params);
 
             // Decode user properties and convert to FHE format
-            let user_traits = decrypt_and_prepare_user_traits(&client_key, &encrypted_user_traits)?;
+            let user_traits = decrypt_and_prepare_user_traits(&secret_key, &encrypted_user_traits, &fhe_params)?;
 
             for ad in ads.iter() {
                 // Convert the ad's target attributes to FHE format
-                let target_traits = prepare_target_traits(&ad.target_traits)?;
+                let target_traits = prepare_target_traits(&ad.target_traits, &public_key, &fhe_params)?;
 
                 // Perform FHE matching
-                let match_score = perform_fhe_match(&server_key, &user_traits, &target_traits)?;
+                let match_score = perform_fhe_match(&user_traits, &target_traits, &public_key, &fhe_params)?;
 
                 // Solve match score
-                let decrypted_score = client_key.decrypt(&match_score);
+                let decrypted_score = decrypt_score(&match_score, &secret_key)?;
 
                 // Mark ads that exceed a certain threshold as matched
                 if decrypted_score > FHE_MATCH_THRESHOLD {
@@ -114,57 +117,81 @@ pub mod solfhe {
                     matched_ads.match_scores.push(decrypted_score);
                 }
             }
-
-            // Sort matching ads by score
             matched_ads.sort_by_score();
 
-            msg!("Sort matched ads by score");
-            Ok(())
-        }
+                  msg!("Ads were matched and ranked using FHE");
+                  Ok(())
+              }
 
 
         // Auxiliary functions for FHE operations
-        fn decrypt_and_prepare_user_traits(client_key: &ClientKey, encrypted_data: &[u8]) -> Result<Vec<Ciphertext>> {
-            // Decrypt encrypted data
-            let decrypted_data = client_key.decrypt_vector(encrypted_data);
+        fn decrypt_and_prepare_user_traits(
+            secret_key: &SecretKey,
+            encrypted_data: &[u8],
+            params: &FheParameters,
+        ) -> Result<Vec<FheCiphertext>> {
+            let decrypted_data = decrypt_vector(secret_key, encrypted_data, params)?;
 
-            // Convert decrypted data to FHE ciphertext
             let mut fhe_traits = Vec::new();
             for trait_value in decrypted_data {
-                fhe_traits.push(client_key.encrypt(trait_value));
+                fhe_traits.push(encrypt(trait_value, secret_key, params)?);
             }
 
             Ok(fhe_traits)
         }
 
-        fn prepare_target_traits(target_traits: &[u8]) -> Result<Vec<Ciphertext>> {
-            // Convert target properties to FHE ciphertext
-            let client_key = ClientKey::new(PARAM_MESSAGE_2_CARRY_2); // 🚨 This key must be stored securely
+        fn prepare_target_traits(
+            target_traits: &[u8],
+            public_key: &PublicKey,
+            params: &FheParameters,
+        ) -> Result<Vec<FheCiphertext>> {
             let mut fhe_traits = Vec::new();
             for trait_value in target_traits {
-                fhe_traits.push(client_key.encrypt(*trait_value as u64));
+                fhe_traits.push(encrypt(*trait_value as u64, public_key, params)?);
             }
 
             Ok(fhe_traits)
         }
 
-        fn perform_fhe_match(server_key: &ServerKey, user_traits: &[Ciphertext], target_traits: &[Ciphertext]) -> Result<Ciphertext> {
-            let mut match_score = server_key.encrypt(0u64);
+        // fn prepare_target_traits(target_traits: &[u8]) -> Result<Vec<Ciphertext>> {
+        //     // Convert target properties to FHE ciphertext
+        //     let client_key = ClientKey::new(PARAM_MESSAGE_2_CARRY_2); // 🚨 This key must be stored securely
+        //     let mut fhe_traits = Vec::new();
+        //     for trait_value in target_traits {
+        //         fhe_traits.push(client_key.encrypt(*trait_value as u64));
+        //     }
+
+        //     Ok(fhe_traits)
+        // }
+
+        fn perform_fhe_match(
+            user_traits: &[FheCiphertext],
+            target_traits: &[FheCiphertext],
+            public_key: &PublicKey,
+            params: &FheParameters,
+        ) -> Result<FheCiphertext> {
+            let mut match_score = encrypt(0u64, public_key, params)?;
 
             for (user_trait, target_trait) in user_traits.iter().zip(target_traits.iter()) {
                 // Calculate differences with XOR operation
-                let diff = server_key.xor(user_trait, target_trait);
+                let diff = fhe_xor(user_trait, target_trait, params)?;
 
                 // Add the difference score to the total score
-                match_score = server_key.add(&match_score, &diff);
+                match_score = fhe_add(&match_score, &diff, params)?;
             }
 
             // Normalize the total score divided by the number of traits
-            let trait_count = server_key.encrypt(user_traits.len() as u64);
-            match_score = server_key.div(&match_score, &trait_count);
+            let trait_count = encrypt(user_traits.len() as u64, public_key, params)?;
+            match_score = fhe_div(&match_score, &trait_count, params)?;
 
             Ok(match_score)
         }
+
+        fn decrypt_score(score: &FheCiphertext, secret_key: &SecretKey) -> Result<u64> {
+            decrypt(score, secret_key)
+        }
+
+
         #[derive(Accounts)]
         pub struct CreateAd<'info> {
             #[account(mut)]
@@ -194,6 +221,7 @@ pub mod solfhe {
             pub is_active: bool,
         }
 
+
         // Update MatchedAdsAccount structure
         #[account]
         pub struct MatchedAdsAccount {
@@ -214,14 +242,67 @@ pub mod solfhe {
         // Update error types
         #[error_code]
         pub enum AdFHEError {
-            #[msg("Invalid advertising duration")]
+            #[msg("Invalid ad time")]
             InvalidAdDuration,
-            #[msg("Invalid target traits")]
+            #[msg("Invalid target properties")]
             InvalidTargetTraits,
-            #[msg("Insufficient balance")]
+            #[msg("Insufficient funds")]
             InsufficientBalance,
             #[msg("FHE operation failed")]
-            FHEOperationFailed,
+            FheOperationFailed,
+            #[msg("Encryption error")]
+            EncryptionError,
+            #[msg("Decryption error")]
+            DecryptionError,
+        }
+
+        type FheResult<T> = std::result::Result<T, AdFHEError>;
+
+        // Traits required for FHE operations
+        trait FheEncrypt {
+            fn encrypt(&self, public_key: &PublicKey, params: &FheParameters) -> FheResult<FheCiphertext>;
+        }
+
+        trait FheDecrypt {
+            fn decrypt(&self, secret_key: &SecretKey) -> FheResult<u64>;
+        }
+
+        trait FheOperation {
+            fn fhe_add(&self, other: &Self, params: &FheParameters) -> FheResult<Self> where Self: Sized;
+            fn fhe_xor(&self, other: &Self, params: &FheParameters) -> FheResult<Self> where Self: Sized;
+            fn fhe_div(&self, other: &Self, params: &FheParameters) -> FheResult<Self> where Self: Sized;
+        }
+
+        // FHE işlemleri için implementasyonlar
+        impl FheEncrypt for u64 {
+            fn encrypt(&self, public_key: &PublicKey, params: &FheParameters) -> FheResult<FheCiphertext> {
+                // Gerçek implementasyon burada olacak
+                Err(AdFHEError::EncryptionError)
+            }
+        }
+
+        impl FheDecrypt for FheCiphertext {
+            fn decrypt(&self, secret_key: &SecretKey) -> FheResult<u64> {
+                // The actual implementation will be here
+                Err(AdFHEError::DecryptionError)
+            }
+        }
+
+        impl FheOperation for FheCiphertext {
+            fn fhe_add(&self, other: &Self, params: &FheParameters) -> FheResult<Self> {
+                // The actual implementation will be here
+                Err(AdFHEError::FheOperationFailed)
+            }
+
+            fn fhe_xor(&self, other: &Self, params: &FheParameters) -> FheResult<Self> {
+                // The actual implementation will be here
+                Err(AdFHEError::FheOperationFailed)
+            }
+
+            fn fhe_div(&self, other: &Self, params: &FheParameters) -> FheResult<Self> {
+                // The actual implementation will be here
+                Err(AdFHEError::FheOperationFailed)
+            }
         }
 
         // FHE match threshold value
