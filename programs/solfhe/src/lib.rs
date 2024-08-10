@@ -1,10 +1,11 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::hash::hash;
+use anchor_lang::solana_program::hash::{hash, Hash};
 use std::mem::size_of;
 use tfhe::prelude::*;
 use tfhe::shortint::parameters::PARAM_MESSAGE_2_CARRY_2;
 use tfhe::shortint::prelude::*;
 use zama_fhe::prelude::*;
+
 
 declare_id!("BxVYzMVCkq4Amxwz5sN8Z9EkATWSoTs99bkLUEmnEscm");
 
@@ -46,16 +47,54 @@ pub mod solfhe {
             Ok(())
         }
 
+        pub fn store_proof(ctx: Context<StoreProof>, proof: Vec<u8>, public_inputs: Vec<u8>) -> Result<()> {
+            let state = &mut ctx.accounts.state;
+            let proof_account = &mut ctx.accounts.proof_account;
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        let state = &mut ctx.accounts.state;
-        state.authority = ctx.accounts.authority.key();
-        state.advertiser_count = 0;
-        state.user_count = 0;
-        state.ad_count = 0;
-        msg!("Starting solFHE Program...");
-        Ok(())
-    }
+            // Generate proof data
+            let proof_data = ProofData {
+                proof,
+                public_inputs,
+                timestamp: Clock::get()?.unix_timestamp,
+            };
+
+            // Update your Proof account
+            proof_account.authority = ctx.accounts.authority.key();
+            proof_account.proof_data = proof_data;
+
+            // Update State
+            state.proof_count = state.proof_count.checked_add(1).unwrap();
+
+            // Calculate and save the proof hash
+            let proof_hash = hash(&proof_account.proof_data.proof);
+            msg!("Proof stored with hash: {:?}", proof_hash);
+
+            Ok(())
+        }
+
+
+        #[account]
+        pub struct StateAccount {
+            pub authority: Pubkey,
+            pub advertiser_count: u64,
+            pub user_count: u64,
+            pub ad_count: u64,
+            pub proof_count: u64,
+        }
+
+        // Update Initialize function
+        pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+            let state = &mut ctx.accounts.state;
+            state.authority = ctx.accounts.authority.key();
+            state.advertiser_count = 0;
+            state.user_count = 0;
+            state.ad_count = 0;
+            state.proof_count = 0;
+            msg!("Starting solFHE Program...");
+            Ok(())
+        }
+
+
     pub fn register_advertiser(
         ctx: Context<RegisterAdvertiser>,
         name: String,
@@ -192,20 +231,33 @@ pub mod solfhe {
             score.decrypt(secret_key)
         }
 
+        #[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
+        pub struct ProofData {
+            pub proof: Vec<u8>,
+            pub public_inputs: Vec<u8>,
+            pub timestamp: i64,
+        }
+
+        #[account]
+        pub struct ProofAccount {
+            pub authority: Pubkey,
+            pub proof_data: ProofData,
+        }
+
+
+
         #[derive(Accounts)]
-        pub struct CreateAd<'info> {
+        pub struct StoreProof<'info> {
             #[account(mut)]
             pub state: Account<'info, StateAccount>,
-            #[account(mut, has_one = authority)]
-            pub advertiser: Account<'info, AdvertiserAccount>,
             #[account(
                 init,
                 payer = authority,
-                space = 8 + size_of::<AdAccount>(),
-                seeds = [b"ad", advertiser.key().as_ref(), &advertiser.ad_count.to_le_bytes()],
+                space = 8 + size_of::<ProofAccount>(),
+                seeds = [b"proof", state.proof_count.to_le_bytes().as_ref()],
                 bump
             )]
-            pub ad: Account<'info, AdAccount>,
+            pub proof_account: Account<'info, ProofAccount>,
             #[account(mut)]
             pub authority: Signer<'info>,
             pub system_program: Program<'info, System>,
@@ -254,6 +306,8 @@ pub mod solfhe {
             EncryptionError,
             #[msg("Decryption error")]
             DecryptionError,
+            #[msg("Invalid proof data")]
+                InvalidProofData,
         }
 
         type FheResult<T> = std::result::Result<T, AdFHEError>;
@@ -314,6 +368,8 @@ pub mod solfhe {
             }
         }
         // FHE match threshold value
+        const MAX_PROOF_SIZE: usize = 1024;
+        const MAX_PUBLIC_INPUTS_SIZE: usize = 256;
         const MAX_AD_DURATION: u64 = 30 * 24 * 60 * 60;
         const FHE_MATCH_THRESHOLD: u64 = 75;
         const MAX_TARGET_TRAITS: usize = 10;
