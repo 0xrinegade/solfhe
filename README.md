@@ -8,7 +8,7 @@
 [![Solana](https://img.shields.io/badge/Solana-1.14-blueviolet)](https://solana.com/)
 [![Anchor](https://img.shields.io/badge/Anchor-0.27.0-blue)](https://project-serum.github.io/anchor/)
 [![Next.js](https://img.shields.io/badge/Next.js-13.0-success)](https://nextjs.org/)
-[![FHE](https://img.shields.io/badge/FHE-Cutting--Edge-orange)](https://dualitytech.com/glossary/fully-homomorphic-encryption/)
+[![FHE](https://img.shields.io/badge/FHE-Cutting--Edge-orange)](https://eprint.iacr.org/2015/1192.pdf)
 
 ## Table of Contents
 
