@@ -1,5 +1,10 @@
 # solFHE(λ): Fully Homomorphic Encryption-based Advertising on Solana
 
+#### WBA Docs
+[Document](https://github.com/user-attachments/files/16591968/solFHE.pdf)
+* Solana Devnet Pubkey: "HWkiywmVgVmVzg3JtHivLrTrQrrKjMaP7mR8QKk84F7b"
+
+
 <div align="center">
   <img src="https://github.com/user-attachments/assets/7e0eabd6-4f28-4a75-acb2-22dd5e724981" alt="solfhe" width="300">
 </div>
