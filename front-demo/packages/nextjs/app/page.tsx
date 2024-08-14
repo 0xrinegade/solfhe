@@ -168,7 +168,7 @@ const Home = () => {
     <div className="flex flex-col items-center gap-4 pt-12">
       <div className="flex flex-col items-center justify-center">
         {/* <Image priority src={logo} alt="" /> */}
-        <h1 className="text-4xl font-bold bg-custom-gradient bg-clip-text text-transparent">AdFHEnture</h1>
+        <h1 className="text-4xl font-bold bg-custom-gradient bg-clip-text text-transparent">solFHE</h1>
         {/* <h2 className="text-xl text-white text-center">
           Neque porro quisquam est qui <br /> dolorem
         </h2> */}

@@ -4,8 +4,8 @@ import "~~/styles/globals.css";
 import { getMetadata } from "~~/utils/scaffold-eth/getMetadata";
 
 export const metadata = getMetadata({
-  title: "AdFHEnture",
-  description: "AdFHEnture",
+  title: "solfHE",
+  description: "solFHE",
 });
 
 const ScaffoldEthApp = ({ children }: { children: React.ReactNode }) => {

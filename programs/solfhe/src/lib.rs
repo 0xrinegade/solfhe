@@ -20,12 +20,12 @@ pub mod solfhe {
         message: HyperlaneMessage,
     ) -> Result<()> {
         let cross_chain_message = CrossChainMessage::decode(&message.body)
-            .map_err(|_| AdFHEError::InvalidCrossChainMessage)?;
+            .map_err(|_| solFHEError::InvalidCrossChainMessage)?;
 
         match cross_chain_message.message_type {
             0 => process_fhenix_ad_data(ctx, &cross_chain_message.payload)?,
             1 => process_fhenix_user_data(ctx, &cross_chain_message.payload)?,
-            _ => return Err(AdFHEError::UnknownMessageType.into()),
+            _ => return Err(solFHEError::UnknownMessageType.into()),
         }
 
         Ok(())
@@ -38,16 +38,16 @@ pub mod solfhe {
         duration: u64,
         payment: u64,
     ) -> Result<()> {
-        require!(!content.is_empty(), AdFHEError::InvalidAdContent);
+        require!(!content.is_empty(), solFHEError::InvalidAdContent);
         require!(
             duration > 0 && duration <= MAX_AD_DURATION,
-            AdFHEError::InvalidAdDuration
+            solFHEError::InvalidAdDuration
         );
         require!(
             !target_traits.is_empty() && target_traits.len() <= MAX_TARGET_TRAITS,
-            AdFHEError::InvalidTargetTraits
+            solFHEError::InvalidTargetTraits
         );
-        require!(payment >= MIN_AD_PAYMENT, AdFHEError::InsufficientPayment);
+        require!(payment >= MIN_AD_PAYMENT, solFHEError::InsufficientPayment);
 
         let state = &mut ctx.accounts.state;
         let advertiser = &mut ctx.accounts.advertiser;
@@ -84,10 +84,10 @@ pub mod solfhe {
         proof: Vec<u8>,
         public_inputs: Vec<u8>,
     ) -> Result<()> {
-        require!(proof.len() <= MAX_PROOF_SIZE, AdFHEError::InvalidProofData);
+        require!(proof.len() <= MAX_PROOF_SIZE, solFHEError::InvalidProofData);
         require!(
             public_inputs.len() <= MAX_PUBLIC_INPUTS_SIZE,
-            AdFHEError::InvalidProofData
+            solFHEError::InvalidProofData
         );
 
         let state = &mut ctx.accounts.state;
@@ -143,7 +143,7 @@ pub fn register_advertiser(
 ) -> Result<()> {
     require!(
         !name.is_empty() && !email.is_empty(),
-        AdFHEError::InvalidAdvertiserData
+        solFHEError::InvalidAdvertiserData
     );
 
     let state = &mut ctx.accounts.state;
@@ -164,7 +164,10 @@ pub fn store_encrypted_user_data(
     ctx: Context<StoreEncryptedUserData>,
     encrypted_data: Vec<u8>,
 ) -> Result<()> {
-    require!(!encrypted_data.is_empty(), AdFHEError::InvalidEncryptedData);
+    require!(
+        !encrypted_data.is_empty(),
+        solFHEError::InvalidEncryptedData
+    );
 
     let state = &mut ctx.accounts.state;
     let user_data = &mut ctx.accounts.user_data;
@@ -182,7 +185,7 @@ pub fn store_encrypted_user_data(
 pub fn match_ads(ctx: Context<MatchAds>, encrypted_user_traits: Vec<u8>) -> Result<()> {
     require!(
         !encrypted_user_traits.is_empty(),
-        AdFHEError::InvalidEncryptedData
+        solFHEError::InvalidEncryptedData
     );
 
     let ads = &ctx.accounts.ads;
@@ -226,7 +229,7 @@ fn decrypt_and_prepare_user_traits(
     params: &FheParameters,
 ) -> Result<Vec<FheCiphertext>> {
     let decrypted_data = zama_fhe::decrypt_vector(secret_key, encrypted_data, params)
-        .map_err(|_| AdFHEError::DecryptionError)?;
+        .map_err(|_| solFHEError::DecryptionError)?;
 
     let mut fhe_traits = Vec::new();
     for trait_value in decrypted_data {
@@ -301,7 +304,7 @@ struct FhenixUserData {
 
 fn process_fhenix_ad_data(ctx: Context<ProcessHyperlaneMessage>, payload: &[u8]) -> Result<()> {
     let fhenix_ad_data =
-        FhenixAdData::try_from_slice(payload).map_err(|_| AdFHEError::InvalidCrossChainMessage)?;
+        FhenixAdData::try_from_slice(payload).map_err(|_| solFHEError::InvalidCrossChainMessage)?;
     let ad_account = &mut ctx.accounts.ad_account;
     ad_account.advertiser = ctx.accounts.authority.key();
     ad_account.content = fhenix_ad_data.encrypted_content;
@@ -318,7 +321,7 @@ fn process_fhenix_ad_data(ctx: Context<ProcessHyperlaneMessage>, payload: &[u8])
 
 fn process_fhenix_user_data(ctx: Context<ProcessHyperlaneMessage>, payload: &[u8]) -> Result<()> {
     let fhenix_user_data = FhenixUserData::try_from_slice(payload)
-        .map_err(|_| AdFHEError::InvalidCrossChainMessage)?;
+        .map_err(|_| solFHEError::InvalidCrossChainMessage)?;
     let user_data_account = &mut ctx.accounts.user_data_account;
     user_data_account.authority = fhenix_user_data.user_id;
     user_data_account.encrypted_data = fhenix_user_data.encrypted_traits;
@@ -462,7 +465,7 @@ impl MatchedAdsAccount {
 
 // Error types
 #[error_code]
-pub enum AdFHEError {
+pub enum solFHEError {
     #[msg("Invalid ad duration")]
     InvalidAdDuration,
     #[msg("Invalid target traits")]
@@ -487,7 +490,7 @@ pub enum AdFHEError {
     InsufficientPayment,
 }
 
-type FheResult<T> = std::result::Result<T, AdFHEError>;
+type FheResult<T> = std::result::Result<T, solFHEError>;
 
 // Traits required for FHE operations
 trait FheEncrypt {
@@ -514,7 +517,7 @@ impl FheEncrypt for u64 {
     fn encrypt(&self, public_key: &PublicKey, params: &FheParameters) -> FheResult<FheCiphertext> {
         match zama_fhe::encrypt(*self, public_key, params) {
             Ok(ciphertext) => Ok(ciphertext),
-            Err(_) => Err(AdFHEError::EncryptionError),
+            Err(_) => Err(solFHEError::EncryptionError),
         }
     }
 }
@@ -523,7 +526,7 @@ impl FheDecrypt for FheCiphertext {
     fn decrypt(&self, secret_key: &SecretKey) -> FheResult<u64> {
         match zama_fhe::decrypt(self, secret_key) {
             Ok(plaintext) => Ok(plaintext),
-            Err(_) => Err(AdFHEError::DecryptionError),
+            Err(_) => Err(solFHEError::DecryptionError),
         }
     }
 }
@@ -532,21 +535,21 @@ impl FheOperation for FheCiphertext {
     fn fhe_add(&self, other: &Self, params: &FheParameters) -> FheResult<Self> {
         match zama_fhe::add(self, other, params) {
             Ok(result) => Ok(result),
-            Err(_) => Err(AdFHEError::FheOperationFailed),
+            Err(_) => Err(solFHEError::FheOperationFailed),
         }
     }
 
     fn fhe_xor(&self, other: &Self, params: &FheParameters) -> FheResult<Self> {
         match zama_fhe::xor(self, other, params) {
             Ok(result) => Ok(result),
-            Err(_) => Err(AdFHEError::FheOperationFailed),
+            Err(_) => Err(solFHEError::FheOperationFailed),
         }
     }
 
     fn fhe_div(&self, other: &Self, params: &FheParameters) -> FheResult<Self> {
         match zama_fhe::div(self, other, params) {
             Ok(result) => Ok(result),
-            Err(_) => Err(AdFHEError::FheOperationFailed),
+            Err(_) => Err(solFHEError::FheOperationFailed),
         }
     }
 }
