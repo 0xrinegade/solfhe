@@ -32,6 +32,40 @@ pub mod solfhe {
         Ok(())
     }
 
+    pub fn submit_user_profile(
+        ctx: Context<SubmitUserProfile>,
+        encrypted_profile_data: Vec<u8>,
+        signature: [u8; 64],
+    ) -> Result<()> {
+        let user_profile = &mut ctx.accounts.user_profile;
+        let user = &ctx.accounts.user;
+
+        // Verify Signature
+        if !verify_signature(&user.key(), &encrypted_profile_data, &signature) {
+            return Err(AdFHEError::InvalidSignature.into());
+        }
+
+        // Save User Profile MetaData
+        user_profile.user = user.key();
+        user_profile.encrypted_data = encrypted_profile_data;
+        user_profile.last_updated = Clock::get()?.unix_timestamp;
+
+        msg!("User profile submitted and verified");
+        Ok(())
+    }
+
+    pub fn update_ad_status(ctx: Context<UpdateAdStatus>, is_active: bool) -> Result<()> {
+        let ad = &mut ctx.accounts.ad;
+        require!(
+            ad.advertiser == ctx.accounts.authority.key(),
+            AdFHEError::Unauthorized
+        );
+
+        ad.is_active = is_active;
+        msg!("Ad status updated: {}", is_active);
+        Ok(())
+    }
+
     pub fn create_ad(
         ctx: Context<CreateAd>,
         content: String,
