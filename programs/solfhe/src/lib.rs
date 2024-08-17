@@ -552,6 +552,10 @@ pub enum solFHEError {
     InvalidEncryptedData,
     #[msg("Insufficient payment for ad creation")]
     InsufficientPayment,
+    #[msg("Invalid signature")]
+    InvalidSignature,
+    #[msg("Unauthorized action")]
+    Unauthorized,
 }
 
 type FheResult<T> = std::result::Result<T, solFHEError>;
