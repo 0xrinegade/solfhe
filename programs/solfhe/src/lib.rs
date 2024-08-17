@@ -558,6 +558,13 @@ pub enum solFHEError {
     Unauthorized,
 }
 
+// Signature verification helper function
+fn verify_signature(pubkey: &Pubkey, message: &[u8], signature: &[u8; 64]) -> bool {
+    let signature = ed25519_dalek::Signature::from_bytes(signature).unwrap();
+    let public_key = ed25519_dalek::PublicKey::from_bytes(pubkey.as_ref()).unwrap();
+    public_key.verify(message, &signature).is_ok()
+}
+
 type FheResult<T> = std::result::Result<T, solFHEError>;
 
 // Traits required for FHE operations
