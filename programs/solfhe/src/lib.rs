@@ -407,6 +407,20 @@ pub struct SubmitUserProfile<'info> {
 }
 
 #[derive(Accounts)]
+pub struct UpdateAdStatus<'info> {
+    #[account(mut)]
+    pub ad: Account<'info, AdAccount>,
+    pub authority: Signer<'info>,
+}
+
+#[account]
+pub struct UserProfile {
+    pub user: Pubkey,
+    pub encrypted_data: Vec<u8>,
+    pub last_updated: i64,
+}
+
+#[derive(Accounts)]
 pub struct ProcessHyperlaneMessage<'info> {
     #[account(mut)]
     pub state: Account<'info, StateAccount>,
