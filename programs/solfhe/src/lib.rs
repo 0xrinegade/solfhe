@@ -392,6 +392,21 @@ pub struct ProofAccount {
 }
 
 #[derive(Accounts)]
+pub struct SubmitUserProfile<'info> {
+    #[account(
+        init_if_needed,
+        payer = user,
+        space = 8 + 32 + 4 + 1000 + 8, // Adjust space as needed
+        seeds = [b"user_profile", user.key().as_ref()],
+        bump
+    )]
+    pub user_profile: Account<'info, UserProfile>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct ProcessHyperlaneMessage<'info> {
     #[account(mut)]
     pub state: Account<'info, StateAccount>,
