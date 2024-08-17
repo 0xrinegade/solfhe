@@ -635,3 +635,5 @@ const MAX_PUBLIC_INPUTS_SIZE: usize = 256;
 const MAX_AD_DURATION: u64 = 30 * 24 * 60 * 60;
 const FHE_MATCH_THRESHOLD: u64 = 75;
 const MAX_TARGET_TRAITS: usize = 10;
+const MAX_PROFILE_DATA_SIZE: usize = 1000; // Adjust as needed
+const SIGNATURE_SIZE: usize = 64;
