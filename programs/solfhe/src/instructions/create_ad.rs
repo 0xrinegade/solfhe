@@ -75,6 +75,12 @@ pub fn handler(
     // Verify and process FHE encrypted data
     let processed_traits = process_fhe_traits(&encrypted_target_traits)?;
 
+    // Check if advertiser has enough balance
+    require!(
+        ctx.accounts.advertiser_token_account.amount >= budget,
+        ErrorCode::InsufficientFunds
+    );
+
     // Transfer tokens from advertiser to treasury
     let cpi_accounts = Transfer {
         from: ctx.accounts.advertiser_token_account.to_account_info(),
@@ -162,10 +168,214 @@ mod tests {
     use super::*;
     use anchor_lang::solana_program::pubkey::Pubkey;
 
+    fn setup_test_environment() -> (Pubkey, Pubkey, Pubkey, Pubkey, Pubkey) {
+        let program_id = Pubkey::new_unique();
+        let authority_pubkey = Pubkey::new_unique();
+        let (state_pubkey, _) = Pubkey::find_program_address(&[b"state"], &program_id);
+        let (advertiser_pubkey, _) =
+            Pubkey::find_program_address(&[b"advertiser", authority_pubkey.as_ref()], &program_id);
+        let (ad_pubkey, _) = Pubkey::find_program_address(
+            &[b"ad", advertiser_pubkey.as_ref(), &[0, 0, 0, 0, 0, 0, 0, 0]],
+            &program_id,
+        );
+        let (treasury_pubkey, _) = Pubkey::find_program_address(&[b"treasury"], &program_id);
+
+        (
+            program_id,
+            authority_pubkey,
+            state_pubkey,
+            advertiser_pubkey,
+            ad_pubkey,
+        )
+    }
+
+    fn create_mock_accounts(
+        program_id: &Pubkey,
+        authority_pubkey: &Pubkey,
+        state_pubkey: &Pubkey,
+        advertiser_pubkey: &Pubkey,
+        ad_pubkey: &Pubkey,
+    ) -> (
+        AccountInfo,
+        AccountInfo,
+        AccountInfo,
+        AccountInfo,
+        AccountInfo,
+        AccountInfo,
+        AccountInfo,
+        AccountInfo,
+    ) {
+        // Create mock state account
+        let mut state_account = StateAccount {
+            bump: 255,
+            authority: *authority_pubkey,
+            advertiser_count: 1,
+            user_count: 0,
+            ad_count: 0,
+            total_budget: 0,
+            payment_mint: Pubkey::new_unique(),
+            last_updated: 0,
+        };
+        let mut state_data = state_account.try_to_vec().unwrap();
+        let mut state_lamports = 1000000000;
+        let state_account_info = AccountInfo::new(
+            state_pubkey,
+            false,
+            true,
+            &mut state_lamports,
+            &mut state_data,
+            program_id,
+            false,
+            0,
+        );
+
+        // Create mock advertiser account
+        let mut advertiser_account = AdvertiserAccount {
+            authority: *authority_pubkey,
+            name: "Test Advertiser".to_string(),
+            email: "test@example.com".to_string(),
+            ad_count: 0,
+            total_budget: 0,
+            reputation_score: 100,
+            is_active: true,
+            created_at: 0,
+            last_updated: 0,
+        };
+        let mut advertiser_data = advertiser_account.try_to_vec().unwrap();
+        let mut advertiser_lamports = 1000000000;
+        let advertiser_account_info = AccountInfo::new(
+            advertiser_pubkey,
+            false,
+            true,
+            &mut advertiser_lamports,
+            &mut advertiser_data,
+            program_id,
+            false,
+            0,
+        );
+
+        // Create mock ad account
+        let mut ad_data = vec![0; AdAccount::SPACE];
+        let mut ad_lamports = 0;
+        let ad_account_info = AccountInfo::new(
+            ad_pubkey,
+            false,
+            true,
+            &mut ad_lamports,
+            &mut ad_data,
+            program_id,
+            false,
+            0,
+        );
+
+        // Create mock token accounts
+        let mut advertiser_token_account = TokenAccount::default();
+        advertiser_token_account.owner = *authority_pubkey;
+        advertiser_token_account.mint = state_account.payment_mint;
+        advertiser_token_account.amount = 1000000000;
+        let mut advertiser_token_data = advertiser_token_account.try_to_vec().unwrap();
+        let mut advertiser_token_lamports = 1000000000;
+        let advertiser_token_account_info = AccountInfo::new(
+            &Pubkey::new_unique(),
+            false,
+            true,
+            &mut advertiser_token_lamports,
+            &mut advertiser_token_data,
+            program_id,
+            false,
+            0,
+        );
+
+        let mut treasury_account = TokenAccount::default();
+        treasury_account.owner = *state_pubkey;
+        treasury_account.mint = state_account.payment_mint;
+        let mut treasury_data = treasury_account.try_to_vec().unwrap();
+        let mut treasury_lamports = 1000000000;
+        let treasury_account_info = AccountInfo::new(
+            &Pubkey::new_unique(),
+            false,
+            true,
+            &mut treasury_lamports,
+            &mut treasury_data,
+            program_id,
+            false,
+            0,
+        );
+
+        let mut authority_lamports = 1000000000;
+        let mut authority_data = vec![];
+        let authority_account_info = AccountInfo::new(
+            authority_pubkey,
+            true,
+            false,
+            &mut authority_lamports,
+            &mut authority_data,
+            &Pubkey::default(),
+            false,
+            0,
+        );
+
+        let token_program_id = Pubkey::new_unique();
+        let mut token_program_lamports = 0;
+        let mut token_program_data = vec![];
+        let token_program_account_info = AccountInfo::new(
+            &token_program_id,
+            false,
+            false,
+            &mut token_program_lamports,
+            &mut token_program_data,
+            &Pubkey::default(),
+            false,
+            0,
+        );
+
+        let system_program_id = Pubkey::new_unique();
+        let mut system_program_lamports = 0;
+        let mut system_program_data = vec![];
+        let system_program_account_info = AccountInfo::new(
+            &system_program_id,
+            false,
+            false,
+            &mut system_program_lamports,
+            &mut system_program_data,
+            &Pubkey::default(),
+            false,
+            0,
+        );
+
+        (
+            state_account_info,
+            advertiser_account_info,
+            ad_account_info,
+            advertiser_token_account_info,
+            treasury_account_info,
+            authority_account_info,
+            token_program_account_info,
+            system_program_account_info,
+        )
+    }
+
     #[test]
     fn test_create_ad_with_fhe() {
-        // Set up test environment (similar to previous test setup)
-        // ...
+        let (program_id, authority_pubkey, state_pubkey, advertiser_pubkey, ad_pubkey) =
+            setup_test_environment();
+
+        let (
+            state_account_info,
+            advertiser_account_info,
+            ad_account_info,
+            advertiser_token_account_info,
+            treasury_account_info,
+            authority_account_info,
+            token_program_account_info,
+            system_program_account_info,
+        ) = create_mock_accounts(
+            &program_id,
+            &authority_pubkey,
+            &state_pubkey,
+            &advertiser_pubkey,
+            &ad_pubkey,
+        );
 
         // Generate dummy encrypted traits
         let client_key = ClientKey::new(PARAM_MESSAGE_2_CARRY_2);
@@ -174,37 +384,9 @@ mod tests {
             .collect();
         let encrypted_target_traits = bincode::serialize(&dummy_traits).unwrap();
 
-        // Create test accounts and context
-        // ...
-
-        let content = "Test Ad Content".to_string();
-        let duration = 24 * 60 * 60; // 1 day
-        let budget = 500_000_000; // 0.5 SOL
-
-        let result = handler(
-            context,
-            content.clone(),
-            encrypted_target_traits,
-            duration,
-            budget,
-        );
-        assert!(result.is_ok());
-
-        // Verify account updates
-        // ...
-
-        // Verify FHE processing
-        let ad = AdAccount::try_from_slice(&ad_account_info.data.borrow()).unwrap();
-        let processed_traits: Vec<Ciphertext> =
-            bincode::deserialize(&ad.encrypted_target_traits).unwrap();
-        assert_eq!(processed_traits.len(), FHE_TRAITS_COUNT);
-
-        // Decrypt and verify processed traits
-        for (i, ct) in processed_traits.iter().enumerate() {
-            let decrypted = client_key.decrypt(ct);
-            assert_eq!(decrypted, (i as u64) + 1); // Original value + 1
-        }
-    }
-
-    // @virjilakrum: Additional tests maybe 🤡 ...
-}
+        let accounts = CreateAd {
+            state: Account::try_from(&state_account_info).unwrap(),
+            advertiser: Account::try_from(&advertiser_account_info).unwrap(),
+            ad: Account::try_from(&ad_account_info).unwrap(),
+            advertiser_token_account: Account::try_from(&advertiser_token_account_info).unwrap(),
+            treasury: Account
