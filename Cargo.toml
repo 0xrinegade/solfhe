@@ -12,3 +12,8 @@ codegen-units = 1
 
 [dependencies]
 anchor-lang = "0.28.0"
+hyperlane-core = "0.1.0"
+hyperlane-solana = "0.1.0"
+borsh = "0.9.3"
+tfhe = "0.2.4"
+zama_fhe = "0.1.0"
