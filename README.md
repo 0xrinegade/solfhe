@@ -6,7 +6,7 @@
 
 
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/be0e284d-f006-4754-9719-c222d97a7afd" alt="solfhe" width="500">
+  <img src="https://github.com/user-attachments/assets/be0e284d-f006-4754-9719-c222d97a7afd" alt="solfhe" width="400">
 </div>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
