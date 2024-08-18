@@ -6,11 +6,12 @@
 
 
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/7e0eabd6-4f28-4a75-acb2-22dd5e724981" alt="solfhe" width="300">
+  <img src="https://github.com/user-attachments/assets/be0e284d-f006-4754-9719-c222d97a7afd" alt="solfhe" width="400">
 </div>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Solana](https://img.shields.io/badge/Solana-1.14-blueviolet)](https://solana.com/)
+
 [![Anchor](https://img.shields.io/badge/Anchor-0.27.0-blue)](https://project-serum.github.io/anchor/)
 [![Next.js](https://img.shields.io/badge/Next.js-13.0-success)](https://nextjs.org/)
 [![FHE](https://img.shields.io/badge/FHE-Cutting--Edge-orange)](https://eprint.iacr.org/2015/1192.pdf)
