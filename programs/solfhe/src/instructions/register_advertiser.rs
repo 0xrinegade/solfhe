@@ -6,7 +6,7 @@ use crate::events::AdvertiserRegistered;
 // Constants
 const MAX_NAME_LENGTH: usize = 50;
 const MAX_EMAIL_LENGTH: usize = 100;
-const MIN_DEPOSIT_AMOUNT: u64 = 10_000_000; // 0.01 SOL
+const MIN_DEPOSIT_AMOUNT: u64 = 10_000_000; // 0.01 SOL 🤑
 
 #[derive(Accounts)]
 #[instruction(name: String, email: String)]
@@ -91,7 +91,7 @@ pub fn handler(ctx: Context<RegisterAdvertiser>, name: String, email: String) ->
 // Helper function to validate email format
 fn is_valid_email(email: &str) -> bool {
     // Basic email validation logic
-    // This can be expanded for more robust validation
+    // This can be expanded for more robust validation 🤓
     email.contains('@') && email.contains('.')
 }
 
