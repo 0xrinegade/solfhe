@@ -167,6 +167,7 @@ fn process_fhe_traits(encrypted_data: &[u8]) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
     use anchor_lang::solana_program::pubkey::Pubkey;
+    use tfhe::shortint::prelude::*;
 
     fn setup_test_environment() -> (Pubkey, Pubkey, Pubkey, Pubkey, Pubkey) {
         let program_id = Pubkey::new_unique();
@@ -356,7 +357,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_ad_with_fhe() {
+    fn test_create_ad_with_realistic_fhe() {
         let (program_id, authority_pubkey, state_pubkey, advertiser_pubkey, ad_pubkey) =
             setup_test_environment();
 
@@ -377,16 +378,83 @@ mod tests {
             &ad_pubkey,
         );
 
-        // Generate dummy encrypted traits
         let client_key = ClientKey::new(PARAM_MESSAGE_2_CARRY_2);
-        let dummy_traits: Vec<Ciphertext> = (0..FHE_TRAITS_COUNT)
-            .map(|i| client_key.encrypt(i as u64))
+        let server_key = ServerKey::new(&client_key);
+
+        // Realistic target traits (i prefered age)
+        let target_traits: Vec<u64> = vec![25, 30, 35, 40, 45];
+
+        // Encry target traits
+        let encrypted_traits: Vec<Ciphertext> = target_traits
+            .iter()
+            .map(|&trait_value| client_key.encrypt(trait_value))
             .collect();
-        let encrypted_target_traits = bincode::serialize(&dummy_traits).unwrap();
+
+        // Serialise encrypted properties
+        let encrypted_target_traits = bincode::serialize(&encrypted_traits).unwrap();
 
         let accounts = CreateAd {
             state: Account::try_from(&state_account_info).unwrap(),
             advertiser: Account::try_from(&advertiser_account_info).unwrap(),
             ad: Account::try_from(&ad_account_info).unwrap(),
             advertiser_token_account: Account::try_from(&advertiser_token_account_info).unwrap(),
-            treasury: Account
+            treasury: Account::try_from(&treasury_account_info).unwrap(),
+            authority: Signer::try_from(&authority_account_info).unwrap(),
+            token_program: Program::try_from(&token_program_account_info).unwrap(),
+            system_program: Program::try_from(&system_program_account_info).unwrap(),
+        };
+
+        let content = "Test Ad Content".to_string();
+        let duration = 24 * 60 * 60; // 1 day
+        let budget = 500_000_000; // 0.5 SOL
+
+        let mut context = Context::new(
+            program_id,
+            accounts,
+            &[
+                &state_account_info,
+                &advertiser_account_info,
+                &ad_account_info,
+                &advertiser_token_account_info,
+                &treasury_account_info,
+                &authority_account_info,
+                &token_program_account_info,
+                &system_program_account_info,
+            ],
+            BTreeMap::new(),
+            BTreeMap::new(),
+        );
+
+        let result = handler(
+            context,
+            content.clone(),
+            encrypted_target_traits,
+            duration,
+            budget,
+        );
+        assert!(result.is_ok());
+
+        // Verify name account
+        let ad = AdAccount::try_from_slice(&ad_account_info.data.borrow()).unwrap();
+        let processed_traits: Vec<Ciphertext> =
+            bincode::deserialize(&ad.encrypted_target_traits).unwrap();
+        assert_eq!(processed_traits.len(), FHE_TRAITS_COUNT);
+
+        // Solve and verify processed properties
+        for (i, ct) in processed_traits.iter().enumerate() {
+            let decrypted = client_key.decrypt(ct);
+            assert_eq!(decrypted, target_traits[i] + 1); // Orijinal değer + 1
+        }
+
+        // Verify other account updates
+        let updated_state =
+            StateAccount::try_from_slice(&state_account_info.data.borrow()).unwrap();
+        assert_eq!(updated_state.ad_count, 1);
+        assert_eq!(updated_state.total_budget, budget);
+
+        let updated_advertiser =
+            AdvertiserAccount::try_from_slice(&advertiser_account_info.data.borrow()).unwrap();
+        assert_eq!(updated_advertiser.ad_count, 1);
+        assert_eq!(updated_advertiser.total_budget, budget);
+    }
+}
