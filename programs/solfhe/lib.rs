@@ -324,54 +324,53 @@ fn decrypt_score(score: &FheCiphertext, secret_key: &SecretKey) -> Result<u64> {
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]
-struct FhenixAdData {
-    ad_id: u64,
-    encrypted_content: Vec<u8>,
-    encrypted_target_traits: Vec<u8>,
-    duration: u64,
-}
+// struct FhenixAdData {
+//     ad_id: u64,
+//     encrypted_content: Vec<u8>,
+//     encrypted_target_traits: Vec<u8>,
+//     duration: u64,
+// }
 
-#[derive(BorshSerialize, BorshDeserialize)]
-struct FhenixUserData {
-    user_id: Pubkey,
-    encrypted_traits: Vec<u8>,
-}
+// #[derive(BorshSerialize, BorshDeserialize)]
+// struct FhenixUserData {
+//     user_id: Pubkey,
+//     encrypted_traits: Vec<u8>,
+// }
 
-fn process_fhenix_ad_data(ctx: Context<ProcessHyperlaneMessage>, payload: &[u8]) -> Result<()> {
-    let fhenix_ad_data =
-        FhenixAdData::try_from_slice(payload).map_err(|_| solFHEError::InvalidCrossChainMessage)?;
-    let ad_account = &mut ctx.accounts.ad_account;
-    ad_account.advertiser = ctx.accounts.authority.key();
-    ad_account.content = fhenix_ad_data.encrypted_content;
-    ad_account.target_traits = fhenix_ad_data.encrypted_target_traits;
-    ad_account.duration = fhenix_ad_data.duration;
-    ad_account.created_at = Clock::get()?.unix_timestamp;
-    ad_account.is_active = true;
-    let state = &mut ctx.accounts.state;
-    state.ad_count = state.ad_count.checked_add(1).unwrap();
+// fn process_fhenix_ad_data(ctx: Context<ProcessHyperlaneMessage>, payload: &[u8]) -> Result<()> {
+//     let fhenix_ad_data =
+//         FhenixAdData::try_from_slice(payload).map_err(|_| solFHEError::InvalidCrossChainMessage)?;
+//     let ad_account = &mut ctx.accounts.ad_account;
+//     ad_account.advertiser = ctx.accounts.authority.key();
+//     ad_account.content = fhenix_ad_data.encrypted_content;
+//     ad_account.target_traits = fhenix_ad_data.encrypted_target_traits;
+//     ad_account.duration = fhenix_ad_data.duration;
+//     ad_account.created_at = Clock::get()?.unix_timestamp;
+//     ad_account.is_active = true;
+//     let state = &mut ctx.accounts.state;
+//     state.ad_count = state.ad_count.checked_add(1).unwrap();
 
-    msg!("Processed Fhenix ad data: Ad ID {}", fhenix_ad_data.ad_id);
-    Ok(())
-}
+//     msg!("Processed Fhenix ad data: Ad ID {}", fhenix_ad_data.ad_id);
+//     Ok(())
+// }
 
-fn process_fhenix_user_data(ctx: Context<ProcessHyperlaneMessage>, payload: &[u8]) -> Result<()> {
-    let fhenix_user_data = FhenixUserData::try_from_slice(payload)
-        .map_err(|_| solFHEError::InvalidCrossChainMessage)?;
-    let user_data_account = &mut ctx.accounts.user_data_account;
-    user_data_account.authority = fhenix_user_data.user_id;
-    user_data_account.encrypted_data = fhenix_user_data.encrypted_traits;
-    let state = &mut ctx.accounts.state;
-    if user_data_account.to_account_info().owner == &ID {
-    } else {
-        state.user_count = state.user_count.checked_add(1).unwrap();
-    }
-    msg!(
-        "Processed Fhenix user data for user: {}",
-        fhenix_user_data.user_id
-    );
-    Ok(())
-}
-
+// fn process_fhenix_user_data(ctx: Context<ProcessHyperlaneMessage>, payload: &[u8]) -> Result<()> {
+//     let fhenix_user_data = FhenixUserData::try_from_slice(payload)
+//         .map_err(|_| solFHEError::InvalidCrossChainMessage)?;
+//     let user_data_account = &mut ctx.accounts.user_data_account;
+//     user_data_account.authority = fhenix_user_data.user_id;
+//     user_data_account.encrypted_data = fhenix_user_data.encrypted_traits;
+//     let state = &mut ctx.accounts.state;
+//     if user_data_account.to_account_info().owner == &ID {
+//     } else {
+//         state.user_count = state.user_count.checked_add(1).unwrap();
+//     }
+//     msg!(
+//         "Processed Fhenix user data for user: {}",
+//         fhenix_user_data.user_id
+//     );
+//     Ok(())
+// }
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
 pub struct ProofData {
     pub proof: Vec<u8>,
